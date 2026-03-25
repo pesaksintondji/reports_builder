@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iGeo Fleet — Rapport</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════ TOOLBAR ═══════════════════════════ -->
+<div class="toolbar no-print" id="toolbar">
+  <div class="tb-left">
+    <div class="tb-logo">
+      <span id="tb-logo-svg"><svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="20" fill="#3B82F6"/>
+        <circle cx="20" cy="15" r="6" fill="white"/>
+        <path d="M9 33 Q20 21 31 33" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="20" cy="9" r="2.5" fill="#EF4444"/>
+      </svg></span>
+      <img id="tb-logo-img" style="display:none;height:28px;width:auto;object-fit:contain;" alt="">
+      <span id="tb-logo-text" class="brand-text">igeo</span>
+    </div>
+    <div class="tb-sep"></div>
+    <span class="tb-label" id="tb-source">Rapport d'activité flotte</span>
+  </div>
+
+  <div class="tb-center">
+    <div class="page-nav" id="page-nav"></div>
+  </div>
+
+  <div class="tb-right">
+    <!-- Logo size -->
+    <div class="ctrl-pill" title="Taille du logo">
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <input type="range" id="logo-sz" min="24" max="120" value="40" oninput="setLogoSize(+this.value)" class="sz-range">
+      <span id="logo-sz-val" class="sz-val">40</span>
+    </div>
+
+    <!-- File badge -->
+    <div class="file-badge" id="file-badge" style="display:none">
+      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span id="file-name">fichier.xlsx</span>
+      <button onclick="resetToMock()">✕</button>
+    </div>
+
+    <!-- Logo upload -->
+    <div id="logo-badge" style="display:none">
+      <span id="logo-badge-name">logo</span>
+      <button onclick="resetLogo()">✕</button>
+    </div>
+    <label class="icon-btn" title="Charger un logo">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="handleLogoUpload(this.files[0])">
+    </label>
+
+    <!-- Filtres client + période -->
+    <div class="tb-filters no-print" id="tb-filters" style="display:none">
+      <select id="filter-client" class="tb-select" onchange="applyFilters()" title="Filtrer par client">
+        <option value="">👤 Tous les clients</option>
+      </select>
+      <div id="filter-period-wrap" style="display:none;align-items:center;gap:4px">
+        <span class="tb-filter-sep">📅</span>
+        <select id="filter-from" class="tb-select" onchange="applyFilters()"></select>
+        <span class="tb-filter-sep" style="color:#94A3B8">→</span>
+        <select id="filter-to"   class="tb-select" onchange="applyFilters()"></select>
+      </div>
+    </div>
+
+    <!-- Présentation plein écran -->
+    <button class="btn-present no-print" id="btn-present" onclick="startPresentation()"
+ title="Mode présentation plein écran (touches ← → Échap)">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+      Présentation
+    </button>
+
+    <!-- Générer le prompt -->
+    <button class="btn-context no-print" onclick="generateDataContext()" title="Copier le prompt d'analyse dans le presse-papier">
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      Prompt analyse
+    </button>
+
+    <!-- Générer maintenance par IA -->
+    <button class="btn-context no-print" id="btn-maint-gen" onclick="generateAIMaintenance()" title="Générer la maintenance par IA">
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      Prompt maintenance
+    </button>
+
+    <!-- Export PDF -->
+    <button class="btn-export no-print" id="btn-export-pdf" onclick="exportPDF()" title="Télécharger le rapport en PDF">
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a1 1 0 001 1h16a1 1 0 001-1v-3"/></svg>
+      Télécharger PDF
+    </button>
+    <button class="btn-export no-print" id="btn-pdf-view" onclick="togglePDFView()" title="Masquer l'interface — vue PDF pour extension navigateur">
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Vue PDF
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TOAST ═══════════════════════════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════ DROP OVERLAY ═══════════════════════════ -->
+<div class="drop-overlay" id="drop-overlay">
+  <div class="drop-card">
+    <div style="font-size:52px;margin-bottom:18px">📊</div>
+    <div style="font-size:20px;font-weight:700;color:#1E293B;margin-bottom:8px">Déposez votre fichier Excel</div>
+    <div style="font-size:13px;color:#64748B">Glissez 1 ou plusieurs fichiers Excel mensuels</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ UPLOAD BANNER ═══════════════════════════ -->
+<div class="upload-banner no-print" id="upload-banner">
+  <div class="ub-inner">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+    <span>Glissez votre Excel ici pour un rapport <strong>dynamique</strong></span>
+    <label class="ub-btn">Parcourir <input type="file" id="file-input" accept=".xlsx,.xls" multiple style="display:none" onchange="handleMultiFileInput(this.files)"></label>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ REPORT ═══════════════════════════ -->
+<div class="doc-scroll" id="doc-scroll">
+  <!-- ── Onglets (sticky dans le scroll) ── -->
+  <div class="tab-bar no-print" id="tab-bar">
+    <button class="tab-btn tab-active" id="tab-btn-0" onclick="switchTab(0)">
+      📊 Rapport analytique
+    </button>
+    <button class="tab-btn" id="tab-btn-1" onclick="switchTab(1)">
+      📋 Tableaux résumé clients
+    </button>
+  </div>
+  <div id="report-root"></div>
+  <div id="table-root" style="display:none"></div>
+</div>
+
+<!-- ═══════════════════════════ PRESENTATION OVERLAY ═══════════════════════════ -->
+<div id="pres-overlay" class="pres-overlay" style="display:none;overflow:hidden">
+  <div id="pres-stage" class="pres-stage"></div>
+
+  <!-- Controls -->
+  <div class="pres-controls" id="pres-controls">
+    <button class="pres-btn" onclick="presNav(-1)" title="Précédent (←)">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span class="pres-counter" id="pres-counter">1 / 6</span>
+    <button class="pres-btn" onclick="presNav(1)" title="Suivant (→)">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+    <div class="pres-sep"></div>
+    <button class="pres-btn" onclick="stopPresentation()" title="Quitter (Échap)">
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Slide dots -->
+  <div class="pres-dots" id="pres-dots"></div>
+</div>
+
+<!-- ═══════════════════════════ SCRIPTS ═══════════════════════════ -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/report.js"></script>
+
+</body>
+</html>
