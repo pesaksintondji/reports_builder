@@ -74,7 +74,7 @@ window.addEventListener('DOMContentLoaded', function() {
   window.parcPageNav           = parcPageNav;
   window.initLeafletMap      = initLeafletMap;
   window.syncMaint           = syncMaint;
-  window.generateAIMaintenance = generateAIMaintenance;
+  window.generateAIMaintenance = generateMaintenancePrompt;
 });
 
 /* =================================================================
@@ -2066,18 +2066,36 @@ function syncMaint(ta) {
   if (p) p.innerHTML = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
-function generateAIMaintenance() {
-  var d = APP.data, btn = document.getElementById('btn-maint-gen'), st = document.getElementById('maint-status'), ta = document.getElementById('maint-textarea');
-  if (!btn || !ta) return;
-  btn.disabled = true; btn.innerHTML = '<span class="ai-spin"></span> Génération en cours…';
-  if (st) { st.textContent = 'Connexion…'; st.className = 'ai-status ai-loading'; }
-
-  /* Build vehicle data for prompt — same format as generateAIAnalysis */
+function generateMaintenancePrompt() {
+  var d = APP.data;
+  
+  /* Build vehicle data with maintenance-specific metrics */
   var vLines = [];
   d.tableRows.forEach(function(r) {
+    /* Calculate daily average km */
+    var daysInPeriod = 30; /* default */
+    if (d.period && d.period.includes(' ')) {
+      var parts = d.period.split(' ');
+      if (parts.length >= 2) {
+        var monthYear = parts[parts.length-1];
+        var m = monthYear.substring(0,3).toLowerCase();
+        var y = parseInt(monthYear.substring(4));
+        if (!isNaN(y)) {
+          var monthIdx = {'jan':0,'fév':1,'fev':1,'mar':2,'avr':3,'avril':3,'mai':4,'jun':5,'jui':6,'jul':6,'aoû':7,'aou':7,'sep':8,'oct':9,'nov':10,'dec':11}[m];
+          if (monthIdx !== undefined) {
+            daysInPeriod = new Date(y, monthIdx+1, 0).getDate();
+          }
+        }
+      }
+    }
+    var kmPerDay = r.km > 0 ? (r.km / daysInPeriod).toFixed(1) : '0';
+    
     vLines.push('['+r.client+'] '+r.label
+      +' type:'+r.type
+      +' age:'+formatAge(r.age)
+      +' km_mois:'+r.km
+      +' km_jour_moy:'+kmPerDay
       +' score:'+r.score.toFixed(2)
-      +' km:'+r.km
       +' vMax:'+r.vitMax
       +' infrVit:'+r.spdKmInfr
       +' infrEco:'+r.ecoKmInfr
@@ -2086,11 +2104,11 @@ function generateAIMaintenance() {
   });
   var nonImmatVeh = d.tableRows.filter(function(r){ return r.nonImmat; });
 
-  /* Group by client for summary — same format as generateAIAnalysis */
+  /* Group by client for summary */
   var clientSummary = {};
   d.tableRows.forEach(function(r) {
     var c = r.client;
-    if (!clientSummary[c]) clientSummary[c] = { score:0, n:0, infr:0, inactive:0, km:0 };
+    if (!clientSummary[c]) clientSummary[c] = { score:0, n:0, infr:0, inactive:0, km:0, kmPerDay:0 };
     clientSummary[c].km    += r.km;
     clientSummary[c].infr  += r.spdKmInfr + r.ecoKmInfr;
     clientSummary[c].n     += 1;
@@ -2099,12 +2117,13 @@ function generateAIMaintenance() {
   });
   var clientLines = Object.keys(clientSummary).map(function(c) {
     var s = clientSummary[c];
-    return c+': scoreM='+(s.score/s.n).toFixed(1)+' km='+s.km+' infr='+s.infr+' veh='+s.n+(s.inactive?' inactifs='+s.inactive:'');
+    var avgKmPerDay = (s.km / 30).toFixed(1);
+    return c+': scoreM='+(s.score/s.n).toFixed(1)+' km_mois='+s.km+' km_jour_moy='+avgKmPerDay+' infr='+s.infr+' veh='+s.n+(s.inactive?' inactifs='+s.inactive:'');
   });
 
   /* List vehicles without immatriculation */
   var nonImmatLines = nonImmatVeh.map(function(r) {
-    return '['+r.client+'] '+r.label+' VIN:'+r.vin+' score:'+r.score.toFixed(2);
+    return '['+r.client+'] '+r.label+' VIN:'+r.vin+' type:'+r.type+' age:'+formatAge(r.age)+' score:'+r.score.toFixed(2);
   });
 
   var context = [
@@ -2125,51 +2144,45 @@ function generateAIMaintenance() {
     'Tes alertes concernent la protection des véhicules, l\'usure anormale, et les risques d\'accident matériel.\n' +
     'À partir de ces données, génère UNIQUEMENT un objet JSON valide (sans aucun texte avant ou après, sans balises markdown) avec cette structure exacte :\n' +
     '{\n' +
-    '  "recommandations": [\n' +
-    '    { "client": "NOM_CLIENT", "statut": "alerte|attention|bon|excellent", "actions": ["action 1", "action 2"] }\n' +
+    '  "maintenance": [\n' +
+    '    { "vehicle": "IMMATRICULATION", "client": "NOM_CLIENT", "urgency": "danger|warning|info|ok", "actions": ["action 1", "action 2"] }\n' +
     '  ],\n' +
-    '  "actions_prioritaires": ["action globale 1", "action globale 2", "action globale 3"]\n' +
+    '  "summary": ["résumé 1", "résumé 2", "résumé 3"]\n' +
     '}\n\n' +
     'Règles strictes :\n' +
-    '- statut "alerte"    = risque élevé pour l\'actif BOA (score < 5, excès vitesse graves, usure anormale)\n' +
-    '- statut "attention" = vigilance requise (score 5–7.5, sous-utilisation, infractions récurrentes)\n' +
-    '- statut "bon"       = actif bien préservé (score 7.5–9)\n' +
-    '- statut "excellent" = actif en excellente condition (score >= 9, aucune infraction)\n' +
-    '- Actions orientées PROTECTION DE L\'ACTIF : réduction usure, prévention sinistres, maintenance préventive\n' +
-    '- 1 à 3 actions par preneur, formulées du point de vue de la BOA (gestionnaire d\'actifs)\n' +
+    '- urgency "danger" = maintenance urgente requise (âge > 3 ans OU km_cumulés > 80000 OU km/jour > 150km)\n' +
+    '- urgency "warning" = maintenance à planifier (âge 2-3 ans OU km_cumulés 50000-80000 OU km/jour 100-150km)\n' +
+    '- urgency "info" = à surveiller (âge 1-2 ans OU km_cumulés 30000-50000)\n' +
+    '- urgency "ok" = véhicule en bon état (âge < 1 an ET km_cumulés < 30000)\n' +
+    '- Actions orientées MAINTENANCE PRÉVENTIVE : vidange, freins, pneus, suspension, courroies, filtres\n' +
+    '- Adapter les actions au TYPE de véhicule (Moto/Léger/Camion/Poids-Lourds) et à son USAGE (km/jour)\n' +
+    '- 1 à 3 actions par véhicule, formulées du point de vue de la BOA (gestionnaire d\'actifs)\n' +
     '- 3 actions prioritaires globales max (perspective portefeuille BOA)\n' +
     '- Ton professionnel et factuel, pas d\'emoji dans les textes\n' +
-    '- Chaque preneur de leasing une seule fois\n\n' +
+    '- Chaque véhicule doit apparaître une seule fois\n' +
+    '- Identifier les véhicules sans immatriculation avec un badge spécial\n\n' +
     context.join('\n');
 
-  fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
-  .then(function(r){return r.json();})
-  .then(function(data){
-    var raw = data.content ? data.content.map(function(b){return b.text||'';}).join('') : null;
-    var parsed = null;
-    if (raw) {
-      try {
-        var clean = raw.replace(/```json|```/g,'').trim();
-        parsed = JSON.parse(clean);
-      } catch(e) { parsed = null; }
-    }
-    if (parsed && parsed.recommandations) {
-      renderRecoTable(parsed);
-      ta.value = raw;
-      syncRecoFromParsed(parsed);
+  function _doCopy(text, cb) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(cb).catch(function() {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+        cb();
+      });
     } else {
-      var errMsg = (data.error && data.error.message) ? data.error.message : (raw || 'Erreur inconnue');
-      ta.value = errMsg;
-      syncReco(ta);
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta);
+      cb();
     }
-    btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Regénérer';
-    if (st) { st.textContent = 'Analyse générée ✓'; st.className = 'ai-status ai-ok'; }
-    showToast('Analyse maintenance générée', 'ok');
-  }).catch(function(err){
-    ta.value = 'Erreur de connexion: '+err.message+'\n\nCollez votre analyse ici.';
-    btn.disabled = false; btn.textContent = 'Réessayer';
-    if (st) { st.textContent = 'Erreur réseau'; st.className = 'ai-status ai-err'; }
+  }
+  _doCopy(prompt, function() {
+    window.open('https://chatgpt.com', '_blank');
+    showToast('Prompt maintenance copié — colle avec Ctrl+V dans ChatGPT ✓', 'ok');
   });
 }
 
