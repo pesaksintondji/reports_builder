@@ -876,19 +876,22 @@ function buildMaintenanceRecs(tableRows, dataByMonth) {
       recommendation = 'Vérif. batterie & fluides (Sous-utilisation)';
     }
 
-    /* Format de sortie compatible avec renderMaintTable */
+    /* Format de sortie compatible avec renderMaintTable et buildPageMaintenance */
     var ageLabel = ageMois < 12 ? ageMois + ' mois' : Math.floor(ageMois / 12) + ' an' + (ageMois % 12 > 0 ? ' ' + (ageMois % 12) + ' mois' : '');
 
     return {
-      vehicle:       r.immatFull || r.label,
+      label:         r.label,
       client:        r.client,
       type:          r.type,
-      age:           ageLabel,
-      kmMonth:       kmMon,
-      kmCumul:       cumKm,
-      frequency:     freqData.lbl,
+      age:           r.age,
+      kmMon:         kmMon,
+      cumKm:         cumKm,
+      cumKmEst:      isEst,
+      freq:          freqData,
       urgency:       urgency,
-      recommendation: recommendation
+      recommendation: recommendation,
+      immatFull:     r.immatFull || r.label,
+      nonImmat:      r.nonImmat || false
     };
   });
 }

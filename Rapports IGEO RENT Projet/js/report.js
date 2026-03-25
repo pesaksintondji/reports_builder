@@ -1175,9 +1175,11 @@ function buildPageMaintenance(d) {
     var cumStr = r.cumKm >= 1000
       ? Math.round(r.cumKm/1000).toLocaleString('fr')+'k km'+(r.cumKmEst?' *':'')
       : r.cumKm+' km'+(r.cumKmEst?' *':'');
-    var alertList = r.alerts.map(function(a){
-      return '<span class="maint-alert-tag maint-'+a.urgency+'">'+a.label+'</span>';
-    }).join(' ');
+    
+    /* Nouveau format: recommendation directe au lieu de alerts[] */
+    var alertList = r.recommendation 
+      ? '<span class="maint-alert-tag maint-'+r.urgency+'">'+r.recommendation+'</span>'
+      : '';
     var noAlertMsg = '<span style="color:var(--subtle);font-size:11px">Aucune maintenance préventive requise</span>';
     var immatBadge = r.nonImmat ? ' <span style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:3px;font-size:8px;padding:1px 4px">⏳</span>' : '';
 
@@ -1194,7 +1196,7 @@ function buildPageMaintenance(d) {
       '<td class="td-m">'+r.kmMon.toLocaleString('fr')+' km</td>' +
       '<td class="td-m" style="color:var(--muted)">'+cumStr+'</td>' +
       '<td class="maint-td-freq">'+freqCell+'</td>' +
-      '<td class="maint-td-alerts">'+(r.alerts.length ? alertList : '<span style="color:var(--subtle);font-size:11px">—</span>')+'</td>' +
+      '<td class="maint-td-alerts">'+(alertList ? alertList : '<span style="color:var(--subtle);font-size:11px">—</span>')+'</td>' +
     '</tr>';
   }).join('');
 
