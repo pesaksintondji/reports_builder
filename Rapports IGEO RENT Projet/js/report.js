@@ -1132,11 +1132,11 @@ function buildPageMaintenance(d) {
   var isEst    = recs.some(function(r){return r.cumKmEst;});
 
   var FREQ_LEGEND = [
-    { dot:'🔴', lbl:'Mensuel–2 mois' },
-    { dot:'🟠', lbl:'3–4 mois'       },
-    { dot:'🟡', lbl:'5–6 mois'        },
-    { dot:'🟢', lbl:'Annuel'          },
-    { dot:'🟣', lbl:'2 ans+'          }
+    { dot:'❗', lbl:'1 mois' },
+    { dot:'⚠️', lbl:'3 mois' },
+    { dot:'🔸', lbl:'6 mois' },
+    { dot:'✔️', lbl:'1 an' },
+    { dot:'⭐', lbl:'2 ans' }
   ];
 
   var chips =
@@ -2003,7 +2003,7 @@ function renderMaintTable(data) {
   var sorted = (data.maintenance || []).slice().sort(function(a,b){ return ORDER[a.urgency||'ok'] - ORDER[b.urgency||'ok']; });
 
   /* Build table rows from JSON data with exact columns as requested */
-  var rows = sorted.map(function(r) {
+  var rows = sorted.map(function(r, i) {
     /* Badge emoji based on frequency */
     var freqBadge = '';
     if (r.frequency === '1 mois') freqBadge = '❗';
@@ -2013,18 +2013,17 @@ function renderMaintTable(data) {
     else if (r.frequency === '2 ans') freqBadge = '⭐';
     else freqBadge = '•';
 
-    /* Color based on urgency */
-    var badgeColor = r.urgency === 'danger' ? '#EF4444' : r.urgency === 'warning' ? '#F59E0B' : r.urgency === 'info' ? '#3B82F6' : r.urgency === 'excellent' ? '#10B981' : '#6B7280';
+    var immatBadge = r.nonImmat ? ' <span style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:3px;font-size:8px;padding:1px 4px">⏳</span>' : '';
 
-    return '<tr>' +
-      '<td style="padding:8px 10px;font-weight:600;color:#1E293B">'+r.vehicle+'</td>' +
-      '<td style="padding:8px 10px;color:#475569">'+r.client+'</td>' +
-      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.type||'')+'</td>' +
-      '<td style="padding:8px 10px;color:#7C3AED;font-weight:600;font-size:12px">'+(r.age||'')+'</td>' +
-      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.kmMonth ? r.kmMonth.toLocaleString('fr')+' km':'—')+'</td>' +
-      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.kmCumul ? r.kmCumul.toLocaleString('fr')+' km':'—')+'</td>' +
-      '<td style="padding:8px 10px"><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:'+badgeColor+'20;color:'+badgeColor+'">'+freqBadge+' '+r.frequency+'</span></td>' +
-      '<td style="padding:8px 10px;color:#334155;font-size:12px">'+(r.recommendation||'—')+'</td>' +
+    return '<tr class="'+(i%2?'tr-o':'tr-e')+'">' +
+      '<td class="td-l">'+r.vehicle+immatBadge+'</td>' +
+      '<td>'+r.client+'</td>' +
+      '<td style="font-size:11px">'+(r.type||'')+'</td>' +
+      '<td class="td-m" style="color:#7C3AED;font-weight:600">'+(r.age||'')+'</td>' +
+      '<td class="td-m">'+(r.kmMonth ? r.kmMonth.toLocaleString('fr')+' km':'—')+'</td>' +
+      '<td class="td-m" style="color:var(--muted)">'+(r.kmCumul ? (r.kmCumul >= 1000 ? Math.round(r.kmCumul/1000).toLocaleString('fr')+'k km *' : r.kmCumul.toLocaleString('fr')+' km') :'—')+'</td>' +
+      '<td class="maint-td-freq"><span class="maint-freq-inline"><span class="mfl-dot">'+freqBadge+'</span><span class="mfl-lbl">'+r.frequency+'</span></span></td>' +
+      '<td class="maint-td-alerts">'+(r.recommendation ? '<span class="maint-alert-tag maint-'+r.urgency+'">'+r.recommendation+'</span>' : '<span style="color:var(--subtle);font-size:11px">—</span>')+'</td>' +
     '</tr>';
   }).join('');
 
@@ -2033,18 +2032,18 @@ function renderMaintTable(data) {
     '<ul class="reco-prio-list">' + summary.map(function(s){ return '<li>'+s+'</li>'; }).join('') + '</ul>' : '';
 
   container.innerHTML =
-    '<div class="reco-table-wrap">' +
-      '<div class="reco-section-ttl">RECOMMANDATIONS DÉTAILLÉES PAR CLIENT</div>' +
-      '<table class="reco-tbl" style="width:100%;border-collapse:collapse">' +
+    '<div class="tbl-wrap">' +
+      '<div class="reco-section-ttl" style="margin-bottom:12px">RECOMMANDATIONS DÉTAILLÉES PAR CLIENT</div>' +
+      '<table class="st">' +
         '<thead><tr>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Véhicule</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Client</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Type</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Âge</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Km/mois</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Km cumulés</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Fréquence entretien</th>' +
-          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Recommandation</th>' +
+          '<th>Véhicule</th>' +
+          '<th>Client</th>' +
+          '<th>Type</th>' +
+          '<th>Âge</th>' +
+          '<th>Km/mois</th>' +
+          '<th>Km cumulés</th>' +
+          '<th>Fréquence entretien</th>' +
+          '<th>Recommandation</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
