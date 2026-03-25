@@ -1220,7 +1220,7 @@ function buildPageMaintenance(d) {
     '</div>' +
     '<div class="reco-zone" style="margin-top:24px">' +
       '<div id="maint-table-container" class="reco-table-container"></div>' +
-      '<textarea class="rz-input no-print" id="maint-textarea" rows="4" oninput="syncMaint(this)" placeholder="Collez le résultat JSON de maintenance ici…" style="margin-top:8px;font-size:11px;color:var(--subtle)"></textarea>' +
+      '<textarea class="rz-input no-print" id="maint-textarea" rows="4" oninput="syncMaint(this)" placeholder="Copiez le prompt via « Prompt maintenance » dans la barre, collez-le dans votre outil, puis collez le résultat JSON ici…" style="margin-top:8px;font-size:11px;color:var(--subtle)"></textarea>' +
       '<div class="rz-print print-only" id="maint-print"></div>' +
     '</div>';
 
@@ -2072,51 +2072,74 @@ function generateAIMaintenance() {
   btn.disabled = true; btn.innerHTML = '<span class="ai-spin"></span> Génération en cours…';
   if (st) { st.textContent = 'Connexion…'; st.className = 'ai-status ai-loading'; }
 
-  /* Build vehicle data for prompt */
+  /* Build vehicle data for prompt — same format as generateAIAnalysis */
   var vLines = [];
   d.tableRows.forEach(function(r) {
     vLines.push('['+r.client+'] '+r.label
-      +' type:'+r.type
-      +' age:'+r.age.toFixed(1)+' ans'
+      +' score:'+r.score.toFixed(2)
       +' km:'+r.km
-      +' km/mois:'+r.km
-      +(r.km===0?' INACTIF':''));
+      +' vMax:'+r.vitMax
+      +' infrVit:'+r.spdKmInfr
+      +' infrEco:'+r.ecoKmInfr
+      +(r.km===0?' INACTIF':'')
+      +(r.nonImmat?' SANS_IMMAT(VIN:'+r.vin+')':''));
+  });
+  var nonImmatVeh = d.tableRows.filter(function(r){ return r.nonImmat; });
+
+  /* Group by client for summary — same format as generateAIAnalysis */
+  var clientSummary = {};
+  d.tableRows.forEach(function(r) {
+    var c = r.client;
+    if (!clientSummary[c]) clientSummary[c] = { score:0, n:0, infr:0, inactive:0, km:0 };
+    clientSummary[c].km    += r.km;
+    clientSummary[c].infr  += r.spdKmInfr + r.ecoKmInfr;
+    clientSummary[c].n     += 1;
+    clientSummary[c].score += r.score;
+    if (r.km === 0) clientSummary[c].inactive++;
+  });
+  var clientLines = Object.keys(clientSummary).map(function(c) {
+    var s = clientSummary[c];
+    return c+': scoreM='+(s.score/s.n).toFixed(1)+' km='+s.km+' infr='+s.infr+' veh='+s.n+(s.inactive?' inactifs='+s.inactive:'');
   });
 
-  /* Include existing maintenance recs if available */
-  var maintRecs = d.maintenanceRecs || [];
-  var maintLines = maintRecs.map(function(r) {
-    var alerts = r.alerts.map(function(a){ return a.label; }).join(', ');
-    return '['+r.client+'] '+r.label+' urgency:'+r.urgency+' freq:'+(r.freq?r.freq.lbl:'N/A')+' alerts:['+alerts+'] cumKm:'+r.cumKm;
+  /* List vehicles without immatriculation */
+  var nonImmatLines = nonImmatVeh.map(function(r) {
+    return '['+r.client+'] '+r.label+' VIN:'+r.vin+' score:'+r.score.toFixed(2);
   });
 
   var context = [
     'RAPPORT '+d.reportTitle+' — '+d.period,
-    'KM TOTAL: '+d.totalKm+' | VÉHICULES: '+d.totalVehicles+' | ACTIFS: '+d.activeCount,
+    'KM TOTAL: '+d.totalKm+' | SCORE MOY: '+d.avgScore+'/10 | ACTIFS: '+d.activeCount+'/'+d.totalVehicles,
     '',
-    'DONNÉES VÉHICULES:',
-  ].concat(vLines).concat(['', 'MAINTENANCE ACTUELLE (algorithmique):']).concat(maintLines);
+    'RÉSUMÉ PAR CLIENT:',
+  ].concat(clientLines).concat(['', 'DÉTAIL VÉHICULES:']).concat(vLines);
 
-  var prompt = 'Tu es expert en maintenance de flotte automobile pour la BOA (Banque Of Africa) Bénin, dans un contexte de leasing de véhicules.\n' +
-    'L\'objectif est la PRÉSERVATION DE LA VALEUR DES ACTIFS et la PRÉVENTION DES PANNEAUX par une maintenance proactive.\n' +
-    'Tes recommandations sont adressées à la BOA pour la gestion de son parc en leasing.\n' +
+  if (nonImmatVeh.length > 0) {
+    context = context.concat(['', 'VÉHICULES SANS IMMATRICULATION (identifier avec badge dans les recommandations) :']).concat(nonImmatLines);
+  }
+
+  var prompt = 'Tu es expert en gestion de flotte pour le compte de la BOA (Banque Of Africa) Bénin, dans un contexte de leasing de véhicules.\n' +
+    'L\'objectif de ce rapport est la PRÉSERVATION DE LA VALEUR DES ACTIFS (les véhicules en leasing) et la PRÉVENTION DES RISQUES SINISTRES.\n' +
+    'Tes recommandations sont adressées à la BOA, pas aux conducteurs. Il n\'y a AUCUNE dimension disciplinaire.\n' +
+    'Chaque "client" est un preneur de leasing responsable de la bonne utilisation des actifs BOA.\n' +
+    'Tes alertes concernent la protection des véhicules, l\'usure anormale, et les risques d\'accident matériel.\n' +
     'À partir de ces données, génère UNIQUEMENT un objet JSON valide (sans aucun texte avant ou après, sans balises markdown) avec cette structure exacte :\n' +
     '{\n' +
-    '  "maintenance": [\n' +
-    '    { "vehicle": "LABEL_VEHICULE", "client": "NOM_CLIENT", "urgency": "danger|warning|info|ok", "actions": ["action 1", "action 2"] }\n' +
+    '  "recommandations": [\n' +
+    '    { "client": "NOM_CLIENT", "statut": "alerte|attention|bon|excellent", "actions": ["action 1", "action 2"] }\n' +
     '  ],\n' +
-    '  "summary": ["point résumé 1", "point résumé 2", "point résumé 3"]\n' +
+    '  "actions_prioritaires": ["action globale 1", "action globale 2", "action globale 3"]\n' +
     '}\n\n' +
-    'Règles strictes:\n' +
-    '- urgency "danger" = véhicule critique (km élevés, âge >2 ans, alertes multiples)\n' +
-    '- urgency "warning" = maintenance à planifier (km seuil atteint, âge 1-2 ans)\n' +
-    '- urgency "info" = à surveiller (premier entretien approche, usage intensif)\n' +
-    '- urgency "ok" = véhicule en bon état, pas d\'action immédiate\n' +
-    '- Actions concrètes : vidange, révision, pneus, freins, batterie, courroie, etc.\n' +
-    '- 1 à 4 actions par véhicule selon l\'urgence\n' +
-    '- 3 points de résumé globaux max (vision gestionnaire de parc)\n' +
+    'Règles strictes :\n' +
+    '- statut "alerte"    = risque élevé pour l\'actif BOA (score < 5, excès vitesse graves, usure anormale)\n' +
+    '- statut "attention" = vigilance requise (score 5–7.5, sous-utilisation, infractions récurrentes)\n' +
+    '- statut "bon"       = actif bien préservé (score 7.5–9)\n' +
+    '- statut "excellent" = actif en excellente condition (score >= 9, aucune infraction)\n' +
+    '- Actions orientées PROTECTION DE L\'ACTIF : réduction usure, prévention sinistres, maintenance préventive\n' +
+    '- 1 à 3 actions par preneur, formulées du point de vue de la BOA (gestionnaire d\'actifs)\n' +
+    '- 3 actions prioritaires globales max (perspective portefeuille BOA)\n' +
     '- Ton professionnel et factuel, pas d\'emoji dans les textes\n' +
-    '- Chaque véhicule doit apparaître une seule fois\n\n' +
+    '- Chaque preneur de leasing une seule fois\n\n' +
     context.join('\n');
 
   fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -2131,14 +2154,14 @@ function generateAIMaintenance() {
         parsed = JSON.parse(clean);
       } catch(e) { parsed = null; }
     }
-    if (parsed && parsed.maintenance) {
-      renderMaintTable(parsed);
+    if (parsed && parsed.recommandations) {
+      renderRecoTable(parsed);
       ta.value = raw;
-      syncMaintFromParsed(parsed);
+      syncRecoFromParsed(parsed);
     } else {
       var errMsg = (data.error && data.error.message) ? data.error.message : (raw || 'Erreur inconnue');
       ta.value = errMsg;
-      syncMaint(ta);
+      syncReco(ta);
     }
     btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Regénérer';
     if (st) { st.textContent = 'Analyse générée ✓'; st.className = 'ai-status ai-ok'; }
