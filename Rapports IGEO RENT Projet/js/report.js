@@ -2002,16 +2002,33 @@ function renderMaintTable(data) {
   var container = document.getElementById('maint-table-container');
   if (!container) return;
 
-  /* Build table rows from JSON data */
-  var rows = (data.maintenance || []).map(function(r) {
-    var urgClass = r.urgency === 'danger' ? 'maint-danger' : r.urgency === 'warning' ? 'maint-warning' : r.urgency === 'info' ? 'maint-info' : 'maint-ok';
-    var urgLabel = r.urgency === 'danger' ? '🔴 Urgent' : r.urgency === 'warning' ? '🟡 Planifier' : r.urgency === 'info' ? '🔵 À surveiller' : '🟢 OK';
-    var actions = (r.actions || []).map(function(a) { return '<li>'+a+'</li>'; }).join('');
+  /* Sort by urgency: danger > warning > info > ok > excellent */
+  var ORDER = {danger:0,warning:1,info:2,ok:3,excellent:4};
+  var sorted = (data.maintenance || []).slice().sort(function(a,b){ return ORDER[a.urgency||'ok'] - ORDER[b.urgency||'ok']; });
+
+  /* Build table rows from JSON data with exact columns as requested */
+  var rows = sorted.map(function(r) {
+    /* Badge emoji based on frequency */
+    var freqBadge = '';
+    if (r.frequency === '1 mois') freqBadge = '❗';
+    else if (r.frequency === '3 mois') freqBadge = '⚠️';
+    else if (r.frequency === '6 mois') freqBadge = '🔸';
+    else if (r.frequency === '1 an') freqBadge = '✔️';
+    else if (r.frequency === '2 ans') freqBadge = '⭐';
+    else freqBadge = '•';
+
+    /* Color based on urgency */
+    var badgeColor = r.urgency === 'danger' ? '#EF4444' : r.urgency === 'warning' ? '#F59E0B' : r.urgency === 'info' ? '#3B82F6' : r.urgency === 'excellent' ? '#10B981' : '#6B7280';
+
     return '<tr>' +
-      '<td class="reco-td-client">'+r.vehicle+'</td>' +
-      '<td class="reco-td-client">'+r.client+'</td>' +
-      '<td class="reco-td-statut"><span class="reco-badge '+urgClass+'">'+urgLabel+'</span></td>' +
-      '<td class="reco-td-actions"><ul class="reco-actions-list">'+actions+'</ul></td>' +
+      '<td style="padding:8px 10px;font-weight:600;color:#1E293B">'+r.vehicle+'</td>' +
+      '<td style="padding:8px 10px;color:#475569">'+r.client+'</td>' +
+      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.type||'')+'</td>' +
+      '<td style="padding:8px 10px;color:#7C3AED;font-weight:600;font-size:12px">'+(r.age||'')+'</td>' +
+      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.kmMonth ? r.kmMonth.toLocaleString('fr')+' km':'—')+'</td>' +
+      '<td style="padding:8px 10px;color:#64748B;font-size:12px">'+(r.kmCumul ? r.kmCumul.toLocaleString('fr')+' km':'—')+'</td>' +
+      '<td style="padding:8px 10px"><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:'+badgeColor+'20;color:'+badgeColor+'">'+freqBadge+' '+r.frequency+'</span></td>' +
+      '<td style="padding:8px 10px;color:#334155;font-size:12px">'+(r.recommendation||'—')+'</td>' +
     '</tr>';
   }).join('');
 
@@ -2021,15 +2038,19 @@ function renderMaintTable(data) {
 
   container.innerHTML =
     '<div class="reco-table-wrap">' +
-      '<div class="reco-section-ttl">MAINTENANCE DÉTAILLÉE PAR VÉHICULE</div>' +
-      '<table class="reco-tbl">' +
+      '<div class="reco-section-ttl">RECOMMANDATIONS DÉTAILLÉES PAR CLIENT</div>' +
+      '<table class="reco-tbl" style="width:100%;border-collapse:collapse">' +
         '<thead><tr>' +
-          '<th class="reco-th">VÉHICULE</th>' +
-          '<th class="reco-th">CLIENT</th>' +
-          '<th class="reco-th">STATUT</th>' +
-          '<th class="reco-th">ACTIONS RECOMMANDÉES</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Véhicule</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Client</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Type</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Âge</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Km/mois</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Km cumulés</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Fréquence entretien</th>' +
+          '<th class="reco-th" style="text-align:left;padding:10px;background:#F8FAFC;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase">Recommandation</th>' +
         '</tr></thead>' +
-        '<tbody>'+rows+'</tbody>' +
+        '<tbody>' + rows + '</tbody>' +
       '</table>' +
       summaryHtml +
     '</div>';
@@ -2067,109 +2088,104 @@ function syncMaint(ta) {
 }
 
 function generateAIMaintenance() {
-  var d = APP.data, btn = document.getElementById('btn-maint-gen'), st = document.getElementById('maint-status'), ta = document.getElementById('maint-textarea');
+  var d = APP.data, btn = document.getElementById('btn-maint-gen'), ta = document.getElementById('maint-textarea');
   if (!btn || !ta) return;
-  btn.disabled = true; btn.innerHTML = '<span class="ai-spin"></span> Génération en cours…';
-  if (st) { st.textContent = 'Connexion…'; st.className = 'ai-status ai-loading'; }
 
-  /* Build vehicle data for prompt — same format as generateAIAnalysis */
+  /* Build detailed vehicle data for prompt with Age, Km/mois, Type, Cumulative Km */
   var vLines = [];
   d.tableRows.forEach(function(r) {
-    vLines.push('['+r.client+'] '+r.label
-      +' score:'+r.score.toFixed(2)
-      +' km:'+r.km
-      +' vMax:'+r.vitMax
-      +' infrVit:'+r.spdKmInfr
-      +' infrEco:'+r.ecoKmInfr
-      +(r.km===0?' INACTIF':'')
-      +(r.nonImmat?' SANS_IMMAT(VIN:'+r.vin+')':''));
+    var ageMois = r.age ? Math.round(r.age * 12) : 0;
+    var ageLabel = ageMois < 12 ? ageMois + ' mois' : Math.floor(ageMois / 12) + ' ans' + (ageMois % 12 > 0 ? ' ' + (ageMois % 12) + ' mois' : '');
+    var cumKm = r.km * (r.age ? Math.max(1, Math.round(r.age * 12)) : 1);
+    vLines.push('[' + r.client + '] ' + r.label +
+      ' | Type: ' + r.type +
+      ' | Âge: ' + ageLabel +
+      ' | Km/mois: ' + r.km.toLocaleString('fr') + ' km' +
+      ' | Km cumulés: ~' + Math.round(cumKm / 1000).toLocaleString('fr') + 'k km' +
+      (r.km === 0 ? ' | INACTIF' : '') +
+      (r.nonImmat ? ' | SANS_IMMAT(VIN:' + r.vin + ')' : ''));
   });
-  var nonImmatVeh = d.tableRows.filter(function(r){ return r.nonImmat; });
 
-  /* Group by client for summary — same format as generateAIAnalysis */
+  var nonImmatVeh = d.tableRows.filter(function(r) { return r.nonImmat; });
+
+  /* Group by client for summary */
   var clientSummary = {};
   d.tableRows.forEach(function(r) {
     var c = r.client;
-    if (!clientSummary[c]) clientSummary[c] = { score:0, n:0, infr:0, inactive:0, km:0 };
-    clientSummary[c].km    += r.km;
-    clientSummary[c].infr  += r.spdKmInfr + r.ecoKmInfr;
-    clientSummary[c].n     += 1;
+    if (!clientSummary[c]) clientSummary[c] = { score: 0, n: 0, infr: 0, inactive: 0, km: 0 };
+    clientSummary[c].km += r.km;
+    clientSummary[c].infr += r.spdKmInfr + r.ecoKmInfr;
+    clientSummary[c].n += 1;
     clientSummary[c].score += r.score;
     if (r.km === 0) clientSummary[c].inactive++;
   });
   var clientLines = Object.keys(clientSummary).map(function(c) {
     var s = clientSummary[c];
-    return c+': scoreM='+(s.score/s.n).toFixed(1)+' km='+s.km+' infr='+s.infr+' veh='+s.n+(s.inactive?' inactifs='+s.inactive:'');
+    return c + ': scoreM=' + (s.score / s.n).toFixed(1) + ' km=' + s.km + ' infr=' + s.infr + ' veh=' + s.n + (s.inactive ? ' inactifs=' + s.inactive : '');
   });
 
   /* List vehicles without immatriculation */
   var nonImmatLines = nonImmatVeh.map(function(r) {
-    return '['+r.client+'] '+r.label+' VIN:'+r.vin+' score:'+r.score.toFixed(2);
+    return '[' + r.client + '] ' + r.label + ' VIN:' + r.vin + ' score:' + r.score.toFixed(2);
   });
 
   var context = [
-    'RAPPORT '+d.reportTitle+' — '+d.period,
-    'KM TOTAL: '+d.totalKm+' | SCORE MOY: '+d.avgScore+'/10 | ACTIFS: '+d.activeCount+'/'+d.totalVehicles,
+    'RAPPORT ' + d.reportTitle + ' — ' + d.period,
+    'KM TOTAL: ' + d.totalKm + ' | SCORE MOY: ' + d.avgScore + '/10 | ACTIFS: ' + d.activeCount + '/' + d.totalVehicles,
     '',
     'RÉSUMÉ PAR CLIENT:',
   ].concat(clientLines).concat(['', 'DÉTAIL VÉHICULES:']).concat(vLines);
 
   if (nonImmatVeh.length > 0) {
-    context = context.concat(['', 'VÉHICULES SANS IMMATRICULATION (identifier avec badge dans les recommandations) :']).concat(nonImmatLines);
+    context = context.concat(['', 'VÉHICULES SANS IMMATRICULATION (identifier avec badge):']).concat(nonImmatLines);
   }
 
-  var prompt = 'Tu es expert en gestion de flotte pour le compte de la BOA (Banque Of Africa) Bénin, dans un contexte de leasing de véhicules.\n' +
-    'L\'objectif de ce rapport est la PRÉSERVATION DE LA VALEUR DES ACTIFS (les véhicules en leasing) et la PRÉVENTION DES RISQUES SINISTRES.\n' +
-    'Tes recommandations sont adressées à la BOA, pas aux conducteurs. Il n\'y a AUCUNE dimension disciplinaire.\n' +
-    'Chaque "client" est un preneur de leasing responsable de la bonne utilisation des actifs BOA.\n' +
-    'Tes alertes concernent la protection des véhicules, l\'usure anormale, et les risques d\'accident matériel.\n' +
-    'À partir de ces données, génère UNIQUEMENT un objet JSON valide (sans aucun texte avant ou après, sans balises markdown) avec cette structure exacte :\n' +
+  var prompt = 'Tu es expert en maintenance préventive de flotte automobile pour la BOA (Banque Of Africa) Bénin, dans un contexte de leasing de véhicules.\n' +
+    "L'objectif est la PRÉSERVATION DE LA VALEUR DES ACTIFS et la PRÉVENTION DES PANNES par une maintenance proactive.\n" +
+    'Tes recommandations sont adressées à la BOA, gestionnaire des actifs en leasing.\n\n' +
+    'À partir des données ci-dessous, génère UNIQUEMENT un objet JSON valide (sans texte avant/après, sans markdown) avec cette structure exacte :\n\n' +
     '{\n' +
-    '  "recommandations": [\n' +
-    '    { "client": "NOM_CLIENT", "statut": "alerte|attention|bon|excellent", "actions": ["action 1", "action 2"] }\n' +
+    '  "maintenance": [\n' +
+    '    {\n' +
+    '      "vehicle": "IMMATRICULATION",\n' +
+    '      "client": "NOM_CLIENT",\n' +
+    '      "type": "TYPE_VÉHICULE",\n' +
+    '      "age": "ÂGE_TEXTE",\n' +
+    '      "kmMonth": NOMBRE_KM_MOIS,\n' +
+    '      "kmCumul": NOMBRE_KM_CUMULÉS,\n' +
+    '      "frequency": "1 mois|3 mois|6 mois|1 an|2 ans",\n' +
+    '      "urgency": "danger|warning|info|ok|excellent",\n' +
+    '      "recommendation": "RECOMMANDATION_DE_MAINTENANCE"\n' +
+    '    }\n' +
     '  ],\n' +
-    '  "actions_prioritaires": ["action globale 1", "action globale 2", "action globale 3"]\n' +
+    '  "summary": ["RÉSUMÉ_GLOBAL_1", "RÉSUMÉ_GLOBAL_2"]\n' +
     '}\n\n' +
-    'Règles strictes :\n' +
-    '- statut "alerte"    = risque élevé pour l\'actif BOA (score < 5, excès vitesse graves, usure anormale)\n' +
-    '- statut "attention" = vigilance requise (score 5–7.5, sous-utilisation, infractions récurrentes)\n' +
-    '- statut "bon"       = actif bien préservé (score 7.5–9)\n' +
-    '- statut "excellent" = actif en excellente condition (score >= 9, aucune infraction)\n' +
-    '- Actions orientées PROTECTION DE L\'ACTIF : réduction usure, prévention sinistres, maintenance préventive\n' +
-    '- 1 à 3 actions par preneur, formulées du point de vue de la BOA (gestionnaire d\'actifs)\n' +
-    '- 3 actions prioritaires globales max (perspective portefeuille BOA)\n' +
-    '- Ton professionnel et factuel, pas d\'emoji dans les textes\n' +
-    '- Chaque preneur de leasing une seule fois\n\n' +
+    'Règles STRICTES pour les fréquences (normalisées) :\n' +
+    '- "1 mois"  → ❗ Urgence critique (véhicule très sollicité ou âge avancé)\n' +
+    '- "3 mois"  → ⚠️ Attention requise (seuil maintenance approché)\n' +
+    '- "6 mois"  → 🔸 Maintenance standard (véhicule < 2 ans)\n' +
+    '- "1 an"    → ✔️ Contrôle annuel (véhicule récent < 1 an)\n' +
+    '- "2 ans"   → ⭐ Surveillance (faible usage)\n\n' +
+    'Recommandations types :\n' +
+    '- "Contrôle freins & suspension (Usure critique)"\n' +
+    '- "Vidange moteur & filtres (Seuil atteint)"\n' +
+    '- "Révision distribution (Forte utilisation)"\n' +
+    '- "Aucune action (Conforme)"\n' +
+    '- "Contrôle général (Bon état)"\n' +
+    '- "Surveillance (Faible usage)"\n\n' +
+    'Critères : Âge (<1an léger, 1-2ans standard, >2ans renforcé), Km/mois (<2000 faible, >4000 intensif), Type (Moto fréquent, Lourd renforcé).\n\n' +
+    'Format : JSON pur uniquement.\n\n' +
     context.join('\n');
 
-  fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
-  .then(function(r){return r.json();})
-  .then(function(data){
-    var raw = data.content ? data.content.map(function(b){return b.text||'';}).join('') : null;
-    var parsed = null;
-    if (raw) {
-      try {
-        var clean = raw.replace(/```json|```/g,'').trim();
-        parsed = JSON.parse(clean);
-      } catch(e) { parsed = null; }
-    }
-    if (parsed && parsed.recommandations) {
-      renderRecoTable(parsed);
-      ta.value = raw;
-      syncRecoFromParsed(parsed);
-    } else {
-      var errMsg = (data.error && data.error.message) ? data.error.message : (raw || 'Erreur inconnue');
-      ta.value = errMsg;
-      syncReco(ta);
-    }
-    btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Regénérer';
-    if (st) { st.textContent = 'Analyse générée ✓'; st.className = 'ai-status ai-ok'; }
-    showToast('Analyse maintenance générée', 'ok');
-  }).catch(function(err){
-    ta.value = 'Erreur de connexion: '+err.message+'\n\nCollez votre analyse ici.';
-    btn.disabled = false; btn.textContent = 'Réessayer';
-    if (st) { st.textContent = 'Erreur réseau'; st.className = 'ai-status ai-err'; }
+  navigator.clipboard.writeText(prompt).then(function() {
+    showToast('Prompt copié ! Ouvrez ChatGPT et collez.', 'ok');
+    window.open('https://chatgpt.com/', '_blank');
+    btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/></svg> Copié !';
+    setTimeout(function() {
+      btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg> Prompt maintenance';
+    }, 2000);
+  }).catch(function(err) {
+    showToast('Erreur: ' + err.message, 'err');
   });
 }
 
