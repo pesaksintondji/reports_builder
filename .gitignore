@@ -1,5 +1,70 @@
-The provided input shows a modified file named `"Rapports` which appears to be a directory or file with a special character in its name. However, there are no clear build artifacts, dependency directories, compiled files, or other items that should be added to .gitignore based on the information provided. The current .gitignore content is not shown, so I cannot preserve any existing rules.
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
 
-Since there's insufficient information to determine what should be ignored and the only change is a single modified file that doesn't appear to be a build artifact or temporary file, no additions to .gitignore are warranted.
+# Dependencies
+node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
 
-(No output)
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Editors
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Build directories
+dist/
+build/
+target/
+.gradle/
+
+# Python specific
+.mypy_cache/
+.pytest_cache/
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+```

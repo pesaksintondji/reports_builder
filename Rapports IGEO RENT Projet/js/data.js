@@ -769,48 +769,38 @@ function buildTrends(dataByMonth) {
    ================================================================= */
 function buildMaintenanceRecs(tableRows, dataByMonth) {
 
-  /* ── Fréquence simplifiée selon l'âge du véhicule ──
-     < 12 mois  → Tous les 6 mois  (couleur verte)
-     12–24 mois → Tous les ans     (couleur orange)
-     > 24 mois  → Tous les 2 ans   (couleur rouge)
-     Ajustements : usage intensif (>3000 km/mois) et type lourd raccourcissent */
+  /* ── Fréquence normalisée selon l'âge du véhicule ──
+     Retourne uniquement: "1 mois", "3 mois", "6 mois", "1 an", "2 ans" */
   function freqFromAge(ageMois, kmMon, type) {
     var isLourd = ['Camion','Poids-Lourds','Bus','Fourgon'].indexOf(type) >= 0;
-    var isIntensif = kmMon > 3000;
+    var isIntensif = kmMon > 4000;
     var isMoto = type === 'Moto';
 
-    /* Intervalle de base */
+    /* Intervalle de base en mois */
     var base = ageMois < 12 ? 6 : ageMois < 24 ? 12 : 24;
 
-    /* Réductions */
+    /* Réductions pour usage intensif ou type spécial */
     if (isMoto)      base = Math.min(base, 3);   /* motos : max 3 mois */
     if (isLourd)     base = Math.round(base * 0.7); /* lourds : -30% */
     if (isIntensif)  base = Math.round(base * 0.75); /* intensif : -25% */
 
     base = Math.max(1, base);
 
-    /* Libellé */
-    var lbl = base <= 1  ? 'Mensuel'
-            : base <= 2  ? 'Tous les 2 mois'
-            : base <= 3  ? 'Tous les 3 mois'
-            : base <= 4  ? 'Tous les 4 mois'
-            : base <= 6  ? 'Tous les 6 mois'
-            : base <= 12 ? 'Tous les ans'
-            : 'Tous les 2 ans';
+    /* Normalisation stricte vers les 5 fréquences autorisées */
+    var lbl = base <= 1  ? '1 mois'
+            : base <= 3  ? '3 mois'
+            : base <= 6  ? '6 mois'
+            : base <= 12 ? '1 an'
+            : '2 ans';
 
-    /* Couleur : rouge = court, orange = moyen, vert = long */
-    var color = base <= 2  ? '#EF4444'
-              : base <= 4  ? '#F59E0B'
-              : base <= 6  ? '#F97316'
-              : base <= 12 ? '#10B981'
-              : '#6366F1';
-    var dot   = base <= 2  ? '🔴'
-              : base <= 4  ? '🟠'
-              : base <= 6  ? '🟡'
-              : base <= 12 ? '🟢'
-              : '🟣';
+    /* Urgence associée */
+    var urgency = base <= 1  ? 'danger'
+                : base <= 3  ? 'warning'
+                : base <= 6  ? 'info'
+                : base <= 12 ? 'ok'
+                : 'excellent';
 
-    return { lbl: lbl, color: color, dot: dot, months: base };
+    return { lbl: lbl, urgency: urgency, months: base };
   }
 
   /* Km cumulés estimés */
@@ -846,54 +836,59 @@ function buildMaintenanceRecs(tableRows, dataByMonth) {
     var isEst   = !(dataByMonth && dataByMonth.length > 1);
     var seuils  = KM_SEUILS[r.type] || KM_SEUILS['_default'];
 
-    /* Fréquence recommandée */
-    var freq = kmMon > 0 ? freqFromAge(ageMois, kmMon, r.type) : null;
+    /* Fréquence recommandée et urgence de base */
+    var freqData = kmMon > 0 ? freqFromAge(ageMois, kmMon, r.type) : { lbl: '—', urgency: 'ok', months: 0 };
 
-    /* Alertes km */
-    var urgency = 'ok';
-    var alerts  = [];
+    /* Recommandation basée sur l'urgence */
+    var recommendation = 'Contrôle général (Bon état)';
+    var urgency = freqData.urgency;
+
+    /* Ajustements selon kilométrage et âge */
     var factAge = r.age > 2 ? 0.75 : r.age > 1 ? 0.85 : 1.0;
 
     if (cumKm >= seuils.rc * factAge) {
       urgency = 'danger';
-      alerts.push({ id:'revision_c', label:'Révision complète', urgency:'danger' });
+      recommendation = 'Révision complète (Seuil critique atteint)';
     } else if (cumKm >= seuils.ri * factAge) {
       urgency = 'warning';
-      alerts.push({ id:'revision_i', label:'Révision intermédiaire', urgency:'warning' });
+      recommendation = 'Révision intermédiaire (Usure avancée)';
     } else if (cumKm >= seuils.v * factAge) {
       urgency = 'warning';
-      alerts.push({ id:'vidange', label:'Vidange & filtres', urgency:'warning' });
-    }
-    if (r.age >= 2.0) {
-      if (urgency==='ok') urgency='warning';
-      alerts.push({ id:'courroie', label:'Courroie & fluides', urgency:'warning' });
-    }
-    if (r.age >= 1.0 && r.age < 2.0) {
-      if (urgency==='ok') urgency='info';
-      alerts.push({ id:'freins', label:'Contrôle freins & batterie', urgency:'info' });
-    }
-    if (kmMon > 4000) {
-      if (urgency==='ok') urgency='info';
-      alerts.push({ id:'pneus', label:'Contrôle pneus (usage intensif)', urgency:'info' });
-    }
-    if (kmMon < 500 && r.age >= 0.5) {
-      if (urgency==='ok') urgency='info';
-      alerts.push({ id:'sousutil', label:'Vérif. batterie & fluides', urgency:'info' });
+      recommendation = 'Vidange & filtres (Seuil atteint)';
     }
 
+    /* Ajustements spécifiques */
+    if (r.age >= 2.0 && urgency !== 'danger') {
+      if (urgency === 'ok') urgency = 'warning';
+      recommendation = 'Courroie distribution & fluides (Âge élevé)';
+    } else if (r.age >= 1.0 && r.age < 2.0 && urgency === 'ok') {
+      urgency = 'info';
+      recommendation = 'Contrôle freins & batterie (Vérification annuelle)';
+    }
+
+    if (kmMon > 4000 && urgency === 'ok') {
+      urgency = 'info';
+      recommendation = 'Contrôle pneus (Usage intensif)';
+    }
+
+    if (kmMon < 500 && r.age >= 0.5 && urgency === 'ok') {
+      urgency = 'info';
+      recommendation = 'Vérif. batterie & fluides (Sous-utilisation)';
+    }
+
+    /* Format de sortie compatible avec renderMaintTable */
+    var ageLabel = ageMois < 12 ? ageMois + ' mois' : Math.floor(ageMois / 12) + ' an' + (ageMois % 12 > 0 ? ' ' + (ageMois % 12) + ' mois' : '');
+
     return {
-      label:     r.label,
-      immatFull: r.immatFull || r.label,
-      client:    r.client,
-      type:      r.type,
-      age:       r.age,
-      kmMon:     kmMon,
-      cumKm:     cumKm,
-      cumKmEst:  isEst,
-      alerts:    alerts,
-      urgency:   urgency,
-      nonImmat:  !!r.nonImmat,
-      freq:      freq   /* { lbl, color, months } ou null si inactif */
+      vehicle:       r.immatFull || r.label,
+      client:        r.client,
+      type:          r.type,
+      age:           ageLabel,
+      kmMonth:       kmMon,
+      kmCumul:       cumKm,
+      frequency:     freqData.lbl,
+      urgency:       urgency,
+      recommendation: recommendation
     };
   });
 }

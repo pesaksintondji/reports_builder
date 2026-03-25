@@ -1206,25 +1206,19 @@ function buildPageMaintenance(d) {
     'Alertes basées sur l\'âge et le kilométrage estimé — ' + d.period, '#F59E0B') +
     '<div class="maint-wrap">' +
       chips +
-      '<div class="tbl-wrap" style="padding:0 32px">' +
-        '<table class="st">' +
-          '<thead><tr>' +
-            '<th>Véhicule</th><th>Client</th><th>Type</th>' +
-            '<th>Âge</th><th>Km/mois</th><th>Km cumulés</th>' +
-            '<th>Fréquence entretien</th><th>Alertes actives</th>' +
-          '</tr></thead>' +
-          '<tbody>'+rows+'</tbody>' +
-        '</table>' +
-      '</div>' +
+      '<div id="maint-table-container" class="reco-table-container"></div>' +
       disclaimer +
     '</div>' +
     '<div class="reco-zone" style="margin-top:24px">' +
-      '<div id="maint-table-container" class="reco-table-container"></div>' +
       '<textarea class="rz-input no-print" id="maint-textarea" rows="4" oninput="syncMaint(this)" placeholder="Copiez le prompt via « Prompt maintenance » dans la barre, collez-le dans votre outil, puis collez le résultat JSON ici…" style="margin-top:8px;font-size:11px;color:var(--subtle)"></textarea>' +
       '<div class="rz-print print-only" id="maint-print"></div>' +
     '</div>';
 
   p.appendChild(mkEl('div', '', pageFooter(d.period)));
+  
+  /* Appel initial pour afficher le tableau avec les données existantes */
+  setTimeout(function() { renderMaintTable({maintenance: d.maintenanceRecs || [], summary: []}); }, 0);
+  
   return p;
 }
 
